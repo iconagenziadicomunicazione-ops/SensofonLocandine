@@ -1,0 +1,19 @@
+ISTRUZIONI VELOCI PER PUBBLICARE SU GITHUB + VERCEL
+
+1) Estrai questa cartella ZIP sul Desktop.
+2) Vai su GitHub.com e crea un nuovo repository vuoto, ad esempio: sensofon-locandine
+3) Dentro il repository, clicca "uploading an existing file" oppure "Add file" > "Upload files".
+4) Trascina TUTTO il contenuto di questa cartella, non la cartella compressa.
+   Devi caricare file come package.json, app.json, vercel.json, app, assets, src, ecc.
+5) Clicca "Commit changes".
+6) Vai su Vercel.com > Add New > Project.
+7) Importa il repository GitHub appena creato.
+8) Impostazioni:
+   - Framework Preset: Other
+   - Build Command: npm run build
+   - Output Directory: dist
+   - Install Command: npm install
+9) Clicca Deploy.
+
+Nota: questa versione è pensata per essere pubblicata come sito web/PWA gratuito.
+Se non imposti un backend, la cronologia dei poster viene salvata nel browser del singolo dispositivo.
