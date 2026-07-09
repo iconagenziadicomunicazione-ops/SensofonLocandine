@@ -310,9 +310,6 @@ export default function Compose() {
     fields: values,
     thumbnail: await buildThumb(),
   });
-
-  showToast("Condivisione diretta non supportata. Locandina scaricata.", "error");
-  return;
       let uri: string;
       if (tmpl.exportType === "jpg") {
         uri = (await captureRef(fullRef, { format: "jpg", quality: 0.95, width: tmpl.baseW, height: tmpl.baseH })) as string;
