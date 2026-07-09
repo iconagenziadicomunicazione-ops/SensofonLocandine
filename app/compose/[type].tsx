@@ -292,7 +292,12 @@ export default function Compose() {
   showToast("Condivisione diretta non supportata. Locandina scaricata.", "success");
   return;
 }
-      showToast("Locandina pronta per la condivisione!", "success");
+          } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast("Errore durante la condivisione", "error");
+    } finally {
+      setBusy(false);
+    }
       return;
     }
 
