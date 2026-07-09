@@ -241,14 +241,30 @@ export default function Compose() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       if (Platform.OS === "web") {
-        if (tmpl.exportType === "jpg") {
-          const canvas = await captureWebCanvas();
-          webDownload(canvas.toDataURL("image/jpeg", 0.95), `sensofon-${tmpl.key}.jpg`);
-        }
-        await createPoster({ type: tmpl.key, title: historyTitle(), fields: values, thumbnail: await buildThumb() });
-        showToast("La condivisione è disponibile su dispositivo", "error");
-        return;
-      }
+  if (tmpl.exportType === "jpg") {
+    const canvas = await captureWebCanvas();
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+
+    webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
+
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(
+        "Ho scaricato la locandina Sensofon. La allego qui."
+      )}`,
+      "_blank"
+    );
+  }
+
+  await createPoster({
+    type: tmpl.key,
+    title: historyTitle(),
+    fields: values,
+    thumbnail: await buildThumb(),
+  });
+
+  showToast("Locandina scaricata. Allegala ora su WhatsApp.", "success");
+  return;
+}
 
       let uri: string;
       if (tmpl.exportType === "jpg") {
