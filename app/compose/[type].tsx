@@ -240,19 +240,39 @@ export default function Compose() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      if (Platform.OS === "web") {
+   if (Platform.OS === "web") {
   if (tmpl.exportType === "jpg") {
     const canvas = await captureWebCanvas();
     const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
 
-    webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
 
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(
-        "Ho scaricato la locandina Sensofon. La allego qui."
-      )}`,
-      "_blank"
-    );
+    const file = new File([blob], `sensofon-${tmpl.key}.jpg`, {
+      type: "image/jpeg",
+    });
+
+    const nav: any = navigator;
+
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      await nav.share({
+        files: [file],
+        title: "Locandina Sensofon",
+        text: "Locandina pronta",
+      });
+
+      await createPoster({
+        type: tmpl.key,
+        title: historyTitle(),
+        fields: values,
+        thumbnail: await buildThumb(),
+      });
+
+      showToast("Locandina pronta per la condivisione!", "success");
+      return;
+    }
+
+    webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
   }
 
   await createPoster({
@@ -262,7 +282,7 @@ export default function Compose() {
     thumbnail: await buildThumb(),
   });
 
-  showToast("Locandina scaricata. Allegala ora su WhatsApp.", "success");
+  showToast("Condivisione diretta non supportata. Locandina scaricata.", "error");
   return;
 }
 
