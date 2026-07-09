@@ -229,90 +229,37 @@ export default function Compose() {
     })) as string;
   };
 
-  
   const onShare = async () => {
     const missing = tmpl.fields.filter((f) => f.required && !values[f.key]?.trim());
-
     if (missing.length) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showToast(`Compila: ${missing.map((m) => m.label).join(", ")}`, "error");
       return;
     }
-
     setBusy(true);
-
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      if (Platform.OS === "web") {
-        if (tmpl.exportType === "jpg") {
-          const canvas = await captureWebCanvas();
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+   if (Platform.OS === "web") {
+  if (tmpl.exportType === "jpg") {
+    const canvas = await captureWebCanvas();
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
 
-          const response = await fetch(dataUrl);
-          const blob = await response.blob();
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
 
-          const file = new File([blob], `sensofon-${tmpl.key}.jpg`, {
-            type: "image/jpeg",
-          });
+    const file = new File([blob], `sensofon-${tmpl.key}.jpg`, {
+      type: "image/jpeg",
+    });
 
-          const nav: any = navigator;
+    const nav: any = navigator;
 
-          if (nav.canShare && nav.canShare({ files: [file] })) {
-            await nav.share({
-              files: [file],
-              title: "Locandina Sensofon",
-              text: "Locandina pronta",
-            });
-          } else {
-            webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
-            window.open(
-              `https://wa.me/?text=${encodeURIComponent(
-                "Ho scaricato la locandina Sensofon. La allego qui."
-              )}`,
-              "_blank"
-            );
-          }
-        }
-
-        await createPoster({
-          type: tmpl.key,
-          title: historyTitle(),
-          fields: values,
-          thumbnail: await buildThumb(),
-        });
-
-        showToast("Locandina pronta per la condivisione!", "success");
-        return;
-      }
-
-      let uri: string;
-
-      if (tmpl.exportType === "jpg") {
-        uri = (await captureRef(fullRef, {
-          format: "jpg",
-          quality: 0.95,
-          width: tmpl.baseW,
-          height: tmpl.baseH,
-        })) as string;
-      } else {
-        uri = await buildPosterPdf(tmpl, values);
-      }
-
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(
-          uri,
-          tmpl.exportType === "jpg"
-            ? { mimeType: "image/jpeg", dialogTitle: "Condividi locandina" }
-            : {
-                mimeType: "application/pdf",
-                UTI: "com.adobe.pdf",
-                dialogTitle: "Condividi locandina",
-              }
-        );
-      } else {
-        showToast("Condivisione non disponibile", "error");
-      }
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      await nav.share({
+        files: [file],
+        title: "Locandina Sensofon",
+        text: "Locandina pronta",
+      });
 
       await createPoster({
         type: tmpl.key,
@@ -321,6 +268,65 @@ export default function Compose() {
         thumbnail: await buildThumb(),
       });
 
+      showToast("Locandina pronta per la condivisione!", "success");
+      return;
+    }
+
+    webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
+
+  window.open(
+  `https://wa.me/?text=${encodeURIComponent(
+    "Ho scaricato la locandina Sensofon. La allego qui."
+  )}`,
+  "_blank"
+);
+  }
+
+  await createPoster({
+    type: tmpl.key,
+    title: historyTitle(),
+    fields: values,
+    thumbnail: await buildThumb(),
+  });
+
+  showToast("Condivisione diretta non supportata. Locandina scaricata.", "success");
+  return;
+}
+          } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showToast("Errore durante la condivisione", "error");
+    } finally {
+      setBusy(false);
+    }
+      return;
+    }
+
+    webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
+  }
+
+  await createPoster({
+    type: tmpl.key,
+    title: historyTitle(),
+    fields: values,
+    thumbnail: await buildThumb(),
+  });
+      let uri: string;
+      if (tmpl.exportType === "jpg") {
+        uri = (await captureRef(fullRef, { format: "jpg", quality: 0.95, width: tmpl.baseW, height: tmpl.baseH })) as string;
+      } else {
+        uri = await buildPosterPdf(tmpl, values);
+      }
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(
+          uri,
+          tmpl.exportType === "jpg"
+            ? { mimeType: "image/jpeg", dialogTitle: "Condividi locandina" }
+            : { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: "Condividi locandina" },
+        );
+      } else {
+        showToast("Condivisione non disponibile", "error");
+      }
+      await createPoster({ type: tmpl.key, title: historyTitle(), fields: values, thumbnail: await buildThumb() });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -329,7 +335,6 @@ export default function Compose() {
       setBusy(false);
     }
   };
-
 
 
   return (
