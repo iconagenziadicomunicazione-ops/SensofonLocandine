@@ -273,6 +273,30 @@ export default function Compose() {
     }
 
     webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
+
+  window.open(
+  `https://wa.me/?text=${encodeURIComponent(
+    "Ho scaricato la locandina Sensofon. La allego qui."
+  )}`,
+  "_blank"
+);
+  }
+
+  await createPoster({
+    type: tmpl.key,
+    title: historyTitle(),
+    fields: values,
+    thumbnail: await buildThumb(),
+  });
+
+  showToast("Condivisione diretta non supportata. Locandina scaricata.", "success");
+  return;
+}
+      showToast("Locandina pronta per la condivisione!", "success");
+      return;
+    }
+
+    webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
   }
 
   await createPoster({
