@@ -146,6 +146,92 @@ export default function Compose() {
     document.body.removeChild(a);
   };
 
+  const webDownloadBlob = (blob: Blob, filename: string) => {
+    if (typeof document === "undefined") return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // Crea un PDF a pagina singola direttamente dal canvas, senza dipendenze esterne.
+  // La pagina mantiene il formato di stampa 32 × 47 cm della locandina Fumetto.
+  const canvasToPdfBlob = (canvas: HTMLCanvasElement): Blob => {
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.98);
+    const binary = atob(dataUrl.split(",")[1]);
+    const imageBytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) imageBytes[i] = binary.charCodeAt(i);
+
+    const pageW = 907; // 32 cm a 72 dpi
+    const pageH = 1332; // 47 cm a 72 dpi
+    const encoder = new TextEncoder();
+    const parts: Uint8Array[] = [];
+    const offsets: number[] = [0];
+    let length = 0;
+
+    const pushText = (text: string) => {
+      const bytes = encoder.encode(text);
+      parts.push(bytes);
+      length += bytes.length;
+    };
+    const pushBytes = (bytes: Uint8Array) => {
+      parts.push(bytes);
+      length += bytes.length;
+    };
+    const startObject = (id: number) => {
+      offsets[id] = length;
+      pushText(`${id} 0 obj\n`);
+    };
+
+    pushText("%PDF-1.4\n");
+
+    startObject(1);
+    pushText("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    startObject(2);
+    pushText("<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+    startObject(3);
+    pushText(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
+        "/Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    );
+
+    startObject(4);
+    pushText(
+      `<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} ` +
+        `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.length} >>\nstream\n`,
+    );
+    pushBytes(imageBytes);
+    pushText("\nendstream\nendobj\n");
+
+    const content = `q\n${pageW} 0 0 ${pageH} 0 0 cm\n/Im0 Do\nQ\n`;
+    const contentBytes = encoder.encode(content);
+    startObject(5);
+    pushText(`<< /Length ${contentBytes.length} >>\nstream\n`);
+    pushBytes(contentBytes);
+    pushText("endstream\nendobj\n");
+
+    const xrefOffset = length;
+    pushText("xref\n0 6\n0000000000 65535 f \n");
+    for (let i = 1; i <= 5; i += 1) {
+      pushText(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
+    }
+    pushText(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+    const output = new Uint8Array(length);
+    let cursor = 0;
+    parts.forEach((part) => {
+      output.set(part, cursor);
+      cursor += part.length;
+    });
+    return new Blob([output], { type: "application/pdf" });
+  };
+
   // Web-only: rasterise the off-screen canvas DOM node with html2canvas.
   const captureWebCanvas = async (): Promise<HTMLCanvasElement> => {
     const html2canvas = (await import("html2canvas")).default;
@@ -168,6 +254,7 @@ export default function Compose() {
       showToast(`Compila: ${missing.map((m) => m.label).join(", ")}`, "error");
       return;
     }
+
     setBusy(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -175,40 +262,61 @@ export default function Compose() {
       let thumb: string;
 
       if (isWeb) {
-        // Web: single rasterisation used for download (jpg) and thumbnail.
         const canvas = await captureWebCanvas();
+        thumb = canvasToThumb(canvas);
+
         if (tmpl.exportType === "jpg") {
           webDownload(canvas.toDataURL("image/jpeg", 0.95), `sensofon-${tmpl.key}.jpg`);
+        } else {
+          const pdfBlob = canvasToPdfBlob(canvas);
+          webDownloadBlob(pdfBlob, `sensofon-${tmpl.key}.pdf`);
         }
-        thumb = canvasToThumb(canvas);
       } else if (tmpl.exportType === "jpg") {
         const uri = await captureRef(fullRef, {
-          format: "jpg", quality: 0.95, width: tmpl.baseW, height: tmpl.baseH,
+          format: "jpg",
+          quality: 0.95,
+          width: tmpl.baseW,
+          height: tmpl.baseH,
         });
         const ok = await ensureMedia();
-        if (!ok) { setBusy(false); return; }
+        if (!ok) return;
         await MediaLibrary.saveToLibraryAsync(uri as string);
         thumb = (await captureRef(fullRef, {
-          format: "jpg", quality: 0.6, width: 300,
-          height: Math.round((300 * tmpl.baseH) / tmpl.baseW), result: "base64",
+          format: "jpg",
+          quality: 0.6,
+          width: 300,
+          height: Math.round((300 * tmpl.baseH) / tmpl.baseW),
+          result: "base64",
         })) as string;
       } else {
         const uri = await buildPosterPdf(tmpl, values);
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: "Locandina PDF" });
+          await Sharing.shareAsync(uri, {
+            mimeType: "application/pdf",
+            UTI: "com.adobe.pdf",
+            dialogTitle: "Locandina PDF",
+          });
         }
         thumb = (await captureRef(fullRef, {
-          format: "jpg", quality: 0.6, width: 300,
-          height: Math.round((300 * tmpl.baseH) / tmpl.baseW), result: "base64",
+          format: "jpg",
+          quality: 0.6,
+          width: 300,
+          height: Math.round((300 * tmpl.baseH) / tmpl.baseW),
+          result: "base64",
         })) as string;
       }
 
-      await createPoster({ type: tmpl.key, title: historyTitle(), fields: values, thumbnail: thumb });
+      await createPoster({
+        type: tmpl.key,
+        title: historyTitle(),
+        fields: values,
+        thumbnail: thumb,
+      });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const okMsg = tmpl.exportType === "jpg"
         ? (isWeb ? "Locandina scaricata!" : "Locandina salvata nella galleria!")
-        : (isWeb ? "Anteprima salvata · scarica il PDF dall'app" : "PDF pronto per la condivisione!");
+        : (isWeb ? "PDF scaricato!" : "PDF pronto per la condivisione!");
       showToast(okMsg, "success");
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -229,10 +337,8 @@ export default function Compose() {
     })) as string;
   };
 
-  
   const onShare = async () => {
     const missing = tmpl.fields.filter((f) => f.required && !values[f.key]?.trim());
-
     if (missing.length) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showToast(`Compila: ${missing.map((m) => m.label).join(", ")}`, "error");
@@ -240,54 +346,79 @@ export default function Compose() {
     }
 
     setBusy(true);
-
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       if (Platform.OS === "web") {
+        const canvas = await captureWebCanvas();
+        const thumb = canvasToThumb(canvas);
+
+        let file: File;
+        let fallbackData: string | Blob;
+        let filename: string;
+
         if (tmpl.exportType === "jpg") {
-          const canvas = await captureWebCanvas();
           const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+          const blob = await (await fetch(dataUrl)).blob();
+          filename = `sensofon-${tmpl.key}.jpg`;
+          file = new File([blob], filename, { type: "image/jpeg" });
+          fallbackData = dataUrl;
+        } else {
+          const pdfBlob = canvasToPdfBlob(canvas);
+          filename = `sensofon-${tmpl.key}.pdf`;
+          file = new File([pdfBlob], filename, { type: "application/pdf" });
+          fallbackData = pdfBlob;
+        }
 
-          const response = await fetch(dataUrl);
-          const blob = await response.blob();
+        let shared = false;
+        const nav = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+          share?: (data?: ShareData) => Promise<void>;
+        };
 
-          const file = new File([blob], `sensofon-${tmpl.key}.jpg`, {
-            type: "image/jpeg",
-          });
-
-          const nav: any = navigator;
-
-          if (nav.canShare && nav.canShare({ files: [file] })) {
+        if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+          try {
             await nav.share({
               files: [file],
               title: "Locandina Sensofon",
               text: "Locandina pronta",
             });
-          } else {
-            webDownload(dataUrl, `sensofon-${tmpl.key}.jpg`);
-            window.open(
-              `https://wa.me/?text=${encodeURIComponent(
-                "Ho scaricato la locandina Sensofon. La allego qui."
-              )}`,
-              "_blank"
-            );
+            shared = true;
+          } catch (shareError: any) {
+            // Se l'utente chiude il pannello Condividi, non mostriamo un errore tecnico.
+            if (shareError?.name === "AbortError") return;
           }
+        }
+
+        if (!shared) {
+          if (typeof fallbackData === "string") {
+            webDownload(fallbackData, filename);
+          } else {
+            webDownloadBlob(fallbackData, filename);
+          }
+          window.open(
+            `https://wa.me/?text=${encodeURIComponent(
+              "Ho scaricato la locandina Sensofon. La allego qui.",
+            )}`,
+            "_blank",
+          );
         }
 
         await createPoster({
           type: tmpl.key,
           title: historyTitle(),
           fields: values,
-          thumbnail: await buildThumb(),
+          thumbnail: thumb,
         });
 
-        showToast("Locandina pronta per la condivisione!", "success");
+        showToast(
+          shared ? "Locandina pronta per la condivisione!" : "File scaricato. Allegalo su WhatsApp.",
+          "success",
+        );
         return;
       }
 
       let uri: string;
-
       if (tmpl.exportType === "jpg") {
         uri = (await captureRef(fullRef, {
           format: "jpg",
@@ -308,7 +439,7 @@ export default function Compose() {
                 mimeType: "application/pdf",
                 UTI: "com.adobe.pdf",
                 dialogTitle: "Condividi locandina",
-              }
+              },
         );
       } else {
         showToast("Condivisione non disponibile", "error");
@@ -320,7 +451,6 @@ export default function Compose() {
         fields: values,
         thumbnail: await buildThumb(),
       });
-
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
